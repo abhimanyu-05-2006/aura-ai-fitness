@@ -4,6 +4,8 @@ import cv2
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
+import av
 from pose_logic import PoseEvaluator
 from utils import generate_pdf_report
 
@@ -13,6 +15,11 @@ st.set_page_config(
     layout="wide", 
     page_icon="⚡",
     initial_sidebar_state="expanded"
+)
+
+# STUN Server Configuration for Cloud WebRTC Streaming
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
 )
 
 # ==========================================
@@ -196,7 +203,6 @@ st.markdown("""
 st.sidebar.markdown("### 🎛️ Control Center")
 exercise = st.sidebar.selectbox("Target Exercise Mode", ["Squats", "Bicep Curl", "Push-ups", "Plank", "Tree Pose (Yoga)"])
 voice_coaching = st.sidebar.toggle("🎙️ Enable AI Voice Feedback", value=False)
-run = st.sidebar.checkbox('🎥 Start Vision Feed', value=False)
 
 st.sidebar.markdown("---")
 
@@ -231,6 +237,23 @@ def get_ai_response(user_prompt, key=GROK_API_KEY):
     else:
         return "🤖 **AURA Engine**: Focus on movement tempo control and target an accuracy rating above 80%."
 
+# WebRTC Video Processor Class
+class PoseVideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.evaluator = PoseEvaluator()
+        self.exercise = "Squats"
+
+    def set_exercise(self, ex):
+        self.exercise = ex
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="bgr24")
+        img = cv2.flip(img, 1)
+        
+        # Pose Engine Processing
+        processed_frame, reps, stage, feedback, warning, cur_acc, avg_acc, combo_val, snaps = self.evaluator.process_frame(img, self.exercise)
+        return av.VideoFrame.from_ndarray(processed_frame, format="bgr24")
+
 # Layout
 tab1, tab2, tab3 = st.tabs(["🎥 Live Vision Evaluator", "📸 Rep Snapshots", "🤖 AI Coach Assistant"])
 
@@ -238,20 +261,57 @@ with tab1:
     col_cam, col_metrics = st.columns([2.3, 1])
     
     with col_cam:
-        FRAME_WINDOW = st.image([])
+        webrtc_ctx = webrtc_streamer(
+            key="aura-pose-stream",
+            mode=WebRtcMode.SENDRECV,
+            rtc_configuration=RTC_CONFIGURATION,
+            video_processor_factory=PoseVideoProcessor,
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
+        if webrtc_ctx.video_processor:
+            webrtc_ctx.video_processor.set_exercise(exercise)
     
     with col_metrics:
         st.markdown("### 📈 Live Telemetry")
-        counter_metric = st.empty()
-        accuracy_metric = st.empty()
-        accuracy_badge = st.empty()
-        combo_metric = st.empty()
-        feedback_box = st.empty()
-        warning_box = st.empty()
         
+        # Current Evaluator Stats
+        eval_obj = st.session_state.evaluator
+        cur_acc = eval_obj.accuracy_scores[-1] if eval_obj.accuracy_scores else 100
+        avg_acc = round(sum(eval_obj.accuracy_scores)/len(eval_obj.accuracy_scores), 1) if eval_obj.accuracy_scores else 100
+        reps_display = eval_obj.counter if exercise != "Tree Pose (Yoga)" else f"{eval_obj.tree_hold_time}s"
+        
+        st.metric("Total Completed Reps", reps_display)
+        st.metric("Current Form Score", f"{cur_acc}%", delta=f"Session Avg: {avg_acc}%")
+        
+        # Form Quality State
+        if cur_acc >= 85:
+            st.markdown('<div class="badge badge-excellent">🟢 EXCELLENT FORM</div>', unsafe_allow_html=True)
+        elif cur_acc >= 65:
+            st.markdown('<div class="badge badge-good">🟡 ACCEPTABLE FORM</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="badge badge-poor">🔴 FORM CORRECTION NEEDED</div>', unsafe_allow_html=True)
+            
+            # Voice Feedback Trigger
+            if voice_coaching and (time.time() - st.session_state.last_speech_time > 5.0):
+                trigger_voice_guidance("Please check your form and adjust posture")
+                st.session_state.last_speech_time = time.time()
+
+        if eval_obj.combo >= 3:
+            st.markdown(f"""
+                <div style="background: linear-gradient(90deg, #F59E0B, #EF4444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 1.1rem; padding: 10px 0;">
+                    🔥 {eval_obj.combo}x PERFECT STREAK COMBO!
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.info(f"💡 **Guidance**: {eval_obj.feedback}")
+        
+        if eval_obj.warning:
+            st.error(eval_obj.warning)
+
         elapsed = int(time.time() - st.session_state.start_time)
         st.markdown(f"""
-            <div class="glass-card">
+            <div class="glass-card" style="margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                     <span style="color: #9CA3AF; font-size: 0.85rem;">Session Duration</span>
                     <span style="font-weight: 600; font-size: 0.95rem;">{elapsed}s</span>
@@ -265,7 +325,13 @@ with tab1:
 
 with tab2:
     st.subheader("📸 High-Accuracy Form Snapshots (>90% Score)")
-    snapshots_container = st.container()
+    eval_obj = st.session_state.evaluator
+    if eval_obj.snapshots:
+        cols = st.columns(3)
+        for idx, snap in enumerate(eval_obj.snapshots[-6:]):
+            cols[idx % 3].image(snap, channels="BGR", caption=f"Capture #{idx+1}")
+    else:
+        st.info("No high-accuracy form snapshots captured yet in this session.")
 
 with tab3:
     st.subheader("💬 AI Biomechanics Consultant")
@@ -277,67 +343,6 @@ with tab3:
                 {ans}
             </div>
         """, unsafe_allow_html=True)
-
-# Vision Stream Loop
-if run:
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-    while run:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Camera feed disconnected or unavailable.")
-            break
-            
-        frame = cv2.flip(frame, 1)
-        
-        # Pose Engine Processing
-        processed_frame, reps, stage, feedback, warning, cur_acc, avg_acc, combo_val, snaps = st.session_state.evaluator.process_frame(frame, exercise)
-        
-        FRAME_WINDOW.image(processed_frame, channels="BGR", use_container_width=True)
-        
-        # Metric Updates
-        counter_metric.metric("Total Completed Reps", reps if exercise != "Tree Pose (Yoga)" else f"{st.session_state.evaluator.tree_hold_time}s")
-        accuracy_metric.metric("Current Form Score", f"{cur_acc}%", delta=f"Session Avg: {avg_acc}%")
-        
-        # Form Quality State
-        if cur_acc >= 85:
-            accuracy_badge.markdown('<div class="badge badge-excellent">🟢 EXCELLENT FORM</div>', unsafe_allow_html=True)
-        elif cur_acc >= 65:
-            accuracy_badge.markdown('<div class="badge badge-good">🟡 ACCEPTABLE FORM</div>', unsafe_allow_html=True)
-        else:
-            accuracy_badge.markdown('<div class="badge badge-poor">🔴 FORM CORRECTION NEEDED</div>', unsafe_allow_html=True)
-            
-            # Smart AI Voice Feedback (Triggers once every 5 seconds to prevent overlap)
-            if voice_coaching and (time.time() - st.session_state.last_speech_time > 5.0):
-                trigger_voice_guidance("Please check your form and adjust posture")
-                st.session_state.last_speech_time = time.time()
-
-        if combo_val >= 3:
-            combo_metric.markdown(f"""
-                <div style="background: linear-gradient(90deg, #F59E0B, #EF4444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 1.1rem; padding: 10px 0;">
-                    🔥 {combo_val}x PERFECT STREAK COMBO!
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            combo_metric.empty()
-
-        feedback_box.info(f"💡 **Guidance**: {feedback}")
-        
-        if warning:
-            warning_box.error(warning)
-        else:
-            warning_box.empty()
-            
-        # Snapshot Gallery Rendering
-        if snaps:
-            with snapshots_container:
-                cols = st.columns(3)
-                for idx, snap in enumerate(snaps[-6:]):
-                    cols[idx % 3].image(snap, channels="BGR", caption=f"Capture #{idx+1}")
-
-    cap.release()
 
 # Sidebar Export Section
 st.sidebar.markdown("---")
