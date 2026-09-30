@@ -1,14 +1,17 @@
 import os
 import time
-import cv2
 import requests
+import numpy as np
+
+# Load PyAV before OpenCV/webrtc to prevent binary conflicts
+import av
+import cv2
+
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode, RTCConfiguration
-import av
 from pose_logic import PoseEvaluator
 from utils import generate_pdf_report
-
 # Page Configuration
 st.set_page_config(
     page_title="AURA Fitness | AI Biomechanics & Pose Analytics", 

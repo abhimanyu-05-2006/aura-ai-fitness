@@ -5,4 +5,4 @@ mediapipe
 numpy<2.0.0
 requests
 fpdf
-av
+av>=10.0.0
