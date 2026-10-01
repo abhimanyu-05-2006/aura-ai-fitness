@@ -1,7 +1,7 @@
 streamlit
-mediapipe
 opencv-python-headless
 numpy
-google-generativeai
-python-dotenv
+mediapipe
 reportlab
+python-dotenv
+google-generativeai
