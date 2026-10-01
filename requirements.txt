@@ -1,8 +1,7 @@
 streamlit
-streamlit-webrtc
-opencv-python-headless==4.8.1.78
-mediapipe==0.10.9
-numpy>=1.24.3,<2.0.0
-requests
-fpdf
-av>=10.0.0
+opencv-python-headless
+mediapipe
+numpy
+google-generativeai
+python-dotenv
+reportlab
