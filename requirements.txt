@@ -5,3 +5,4 @@ mediapipe
 reportlab
 python-dotenv
 google-generativeai
+streamlit-webrtc
