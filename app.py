@@ -27,17 +27,17 @@ import mediapipe as mp
 mp_solutions = getattr(mp, "solutions", None)
 
 if mp_solutions is not None:
-    mp_pose = mp_solutions.pose
-    mp_drawing = mp_solutions.drawing_utils
-else:
-    import mediapipe.solutions.pose as mp_pose  # type: ignore
-    import mediapipe.solutions.drawing_utils as mp_drawing  # type: ignore
+    import mediapipe as mp
 
+# Absolute Fail-Safe MediaPipe Solutions Loader
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+    mp_pose = mp.solutions.pose
+    mp_drawing = mp.solutions.drawing_utils
+except AttributeError:
+    # Backup resolution for specific virtualenv configurations
+    from mediapipe import python as mp_python  # type: ignore
+    mp_pose = mp_python.solutions.pose
+    mp_drawing = mp_python.solutions.drawing_utils
 
 GEMINI_INSTALLED = False
 try:
