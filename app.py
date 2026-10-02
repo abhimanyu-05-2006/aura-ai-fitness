@@ -14,7 +14,6 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfigurati
 # ------------------------------------------------------------------------------
 os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
-# SAFE DYNAMIC MEDIAPIPE IMPORT FALLBACK (Fixes AttributeError & Permission Error)
 try:
     import mediapipe as mp
     if hasattr(mp, "solutions"):
@@ -27,14 +26,12 @@ except Exception:
     import mediapipe.python.solutions.pose as mp_pose
     import mediapipe.python.solutions.drawing_utils as mp_drawing
 
-# dotenv for reading hidden .env files
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
-# Google GenAI import (Compatibility Layer)
 GEMINI_INSTALLED = False
 try:
     import google.generativeai as genai
@@ -46,7 +43,6 @@ except ImportError:
     except ImportError:
         GEMINI_INSTALLED = False
 
-# SECURE API KEY INITIALIZATION
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 if not gemini_api_key:
     try:
@@ -55,7 +51,7 @@ if not gemini_api_key:
         gemini_api_key = None
 
 # ==============================================================================
-# 1. PAGE & ENGINE CONFIGURATION (EXACT ORIGINAL GLASSMORPHISM UI)
+# 1. PAGE & ENGINE CONFIGURATION
 # ==============================================================================
 st.set_page_config(
     page_title="AURA AI | Clinical Biomechanics & Dual AI Engine",
@@ -160,7 +156,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Voice Guidance JS Integration
 def play_voice_guidance(text_prompt, enable_voice=True):
     if enable_voice and text_prompt:
         clean_text = text_prompt.replace("'", "").replace('"', '')
@@ -181,7 +176,7 @@ def play_voice_guidance(text_prompt, enable_voice=True):
         components.html(js_code, height=0, width=0)
 
 # ==============================================================================
-# 2. LIGHTWEIGHT FAST MEDIAPIPE POSE ENGINE (PERMISSION-SAFE & NO FREEZE)
+# 2. LIGHTWEIGHT POSE ENGINE
 # ==============================================================================
 def calculate_angle(a, b, c):
     a, b, c = np.array(a), np.array(b), np.array(c)
@@ -194,7 +189,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
         try:
             self.pose = mp_pose.Pose(
                 static_image_mode=False,
-                model_complexity=0,  # Fast processing to prevent camera freezing
+                model_complexity=0,
                 smooth_landmarks=True,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5
@@ -262,7 +257,6 @@ class UltraFastPoseProcessor(VideoProcessorBase):
 
             asym_delta = abs(l_knee_angle - r_knee_angle)
 
-            # Velocity & Power Calculation
             curr_time = time.time()
             dt = curr_time - self.prev_time
             if self.prev_hip and dt > 0:
@@ -272,7 +266,6 @@ class UltraFastPoseProcessor(VideoProcessorBase):
             self.prev_hip = l_hip
             self.prev_time = curr_time
 
-            # Exercise Logic
             if self.exercise == "Squats":
                 self.last_acc = max(30, 100 - int(asym_delta * 1.5))
                 if l_knee[0] > l_ankle[0] + 25:
@@ -346,14 +339,13 @@ class UltraFastPoseProcessor(VideoProcessorBase):
         else:
             self.last_feedback = "No person detected in frame"
 
-        # Direct HUD Text on Frame
         cv2.putText(img, f"REPS: {self.counter}", (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         cv2.putText(img, f"FORM: {self.last_acc}%", (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
         return frame.from_ndarray(img, format="bgr24")
 
 # ==============================================================================
-# 3. FRONTEND UI & DASHBOARD
+# 3. FRONTEND UI & REAL-TIME SIDEBAR TELEMETRY SYNC
 # ==============================================================================
 st.markdown("""
     <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0 20px 0;">
@@ -368,7 +360,6 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# SIDEBAR CONFIGURATION
 st.sidebar.markdown("## 🎛 Control Hub")
 
 selected_exercise = st.sidebar.selectbox(
@@ -387,7 +378,6 @@ else:
 st.sidebar.markdown("---")
 enable_voice_coach = st.sidebar.toggle("Enable Voice Guidance", value=True)
 
-# TAB STRUCTURE
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎥 Live Biomechanics HUD", 
     "📊 Kinematics & Power", 
@@ -420,30 +410,45 @@ with tab1:
 
     with col_hud:
         st.markdown("### 📈 Live Telemetry")
+        
+        # Placeholders to enable dynamic UI updates without page flicker
+        rep_holder = st.empty()
+        form_holder = st.empty()
+        boss_holder = st.empty()
+        badge_holder = st.empty()
+        guidance_holder = st.empty()
+        warning_holder = st.empty()
+
         if ctx.video_processor:
             proc = ctx.video_processor
             is_hold = selected_exercise in ["Plank", "Tree Pose (Yoga)", "Warrior II (Yoga)"]
             
-            st.metric("Completed Reps / Hold Time", f"{proc.hold_duration}s" if is_hold else proc.counter)
+            rep_holder.metric("Completed Reps / Hold Time", f"{proc.hold_duration}s" if is_hold else proc.counter)
             
             avg_acc = int(np.mean(proc.accuracy_scores)) if proc.accuracy_scores else proc.last_acc
-            st.metric("Instant Form Accuracy", f"{proc.last_acc}%", delta=f"Avg: {avg_acc}%")
+            form_holder.metric("Instant Form Accuracy", f"{proc.last_acc}%", delta=f"Avg: {avg_acc}%")
             
-            st.markdown("##### 👾 AI Boss Health")
-            st.progress(proc.boss_hp / 100)
+            with boss_holder.container():
+                st.markdown("##### 👾 AI Boss Health")
+                st.progress(proc.boss_hp / 100)
             
             if proc.last_acc >= 85:
-                st.markdown('<div class="status-badge badge-perfect">🟢 PERFECT BIOMECHANICAL FORM</div>', unsafe_allow_html=True)
+                badge_holder.markdown('<div class="status-badge badge-perfect">🟢 PERFECT BIOMECHANICAL FORM</div>', unsafe_allow_html=True)
             elif proc.last_acc >= 60:
-                st.markdown('<div class="status-badge badge-warn">🟡 MINOR POSTURE DEVIATION</div>', unsafe_allow_html=True)
+                badge_holder.markdown('<div class="status-badge badge-warn">🟡 MINOR POSTURE DEVIATION</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="status-badge badge-danger">🔴 HIGH RISK INJURY CORRECTION</div>', unsafe_allow_html=True)
+                badge_holder.markdown('<div class="status-badge badge-danger">🔴 HIGH RISK INJURY CORRECTION</div>', unsafe_allow_html=True)
 
-            st.info(f"💡 **AI Guidance**: {proc.last_feedback}")
+            guidance_holder.info(f"💡 **AI Guidance**: {proc.last_feedback}")
             if proc.last_warning:
-                st.error(f"⚠️ **Hazard Alert**: {proc.last_warning}")
+                warning_holder.error(f"⚠️ **Hazard Alert**: {proc.last_warning}")
                 
             play_voice_guidance(proc.last_feedback, enable_voice=enable_voice_coach)
+            
+            # Auto-Rerun loop while camera is streaming to keep side panel real-time
+            if ctx.state.playing:
+                time.sleep(0.1)
+                st.rerun()
         else:
             st.warning("⚠️ Press **START** button on camera player to activate webcam stream.")
 
