@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
+# MediaPipe Tasks API (stable modern API)
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
