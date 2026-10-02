@@ -1,13 +1,31 @@
 import os
 import time
 import cv2
+import tempfile
 import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
-import mediapipe as mp
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+
+# ------------------------------------------------------------------------------
+# STREAMLIT CLOUD PERMISSION & MODEL CACHE FIX
+# ------------------------------------------------------------------------------
+os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
+
+# SAFE DYNAMIC MEDIAPIPE IMPORT FALLBACK (Fixes AttributeError & Permission Error)
+try:
+    import mediapipe as mp
+    if hasattr(mp, "solutions"):
+        mp_pose = mp.solutions.pose
+        mp_drawing = mp.solutions.drawing_utils
+    else:
+        from mediapipe.python.solutions import pose as mp_pose
+        from mediapipe.python.solutions import drawing_utils as mp_drawing
+except Exception:
+    import mediapipe.python.solutions.pose as mp_pose
+    import mediapipe.python.solutions.drawing_utils as mp_drawing
 
 # dotenv for reading hidden .env files
 try:
@@ -163,11 +181,8 @@ def play_voice_guidance(text_prompt, enable_voice=True):
         components.html(js_code, height=0, width=0)
 
 # ==============================================================================
-# 2. LIGHTWEIGHT FAST MEDIAPIPE POSE ENGINE (NO FREEZE)
+# 2. LIGHTWEIGHT FAST MEDIAPIPE POSE ENGINE (PERMISSION-SAFE & NO FREEZE)
 # ==============================================================================
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-
 def calculate_angle(a, b, c):
     a, b, c = np.array(a), np.array(b), np.array(c)
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
@@ -176,13 +191,23 @@ def calculate_angle(a, b, c):
 
 class UltraFastPoseProcessor(VideoProcessorBase):
     def __init__(self):
-        self.pose = mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=0, # Fast processing to prevent camera freezing
-            smooth_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        try:
+            self.pose = mp_pose.Pose(
+                static_image_mode=False,
+                model_complexity=0,  # Fast processing to prevent camera freezing
+                smooth_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+        except Exception:
+            self.pose = mp_pose.Pose(
+                static_image_mode=False,
+                model_complexity=1,
+                smooth_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+
         self.exercise = "Squats"
         self.weight = 70
         self.counter = 0
@@ -344,7 +369,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # SIDEBAR CONFIGURATION
-st.sidebar.markdown("## 🎛️️ Control Hub")
+st.sidebar.markdown("## 🎛 Control Hub")
 
 selected_exercise = st.sidebar.selectbox(
     "Select Target Exercise",
