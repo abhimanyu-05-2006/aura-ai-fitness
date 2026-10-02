@@ -7,38 +7,27 @@ import streamlit as st
 import streamlit.components.v1 as components
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration, VideoHTMLAttributes
-
-# Real-time sidebar UI sync refresh component
-try:
-    from streamlit_autorefresh import st_autorefresh
-    HAS_AUTOREFRESH = True
-except ImportError:
-    HAS_AUTOREFRESH = False
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
 # ------------------------------------------------------------------------------
 # STREAMLIT CLOUD PERMISSION & MODEL CACHE FIX
 # ------------------------------------------------------------------------------
 os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
-try:
-    import mediapipe as mp
-    if hasattr(mp, "solutions"):
-        mp_pose = mp.solutions.pose
-        mp_drawing = mp.solutions.drawing_utils
-    else:
-        from mediapipe.python.solutions import pose as mp_pose
-        from mediapipe.python.solutions import drawing_utils as mp_drawing
-except Exception:
-    import mediapipe.python.solutions.pose as mp_pose
-    import mediapipe.python.solutions.drawing_utils as mp_drawing
+    # Modern & Backward-Compatible MediaPipe Import
+# Modern MediaPipe Import (Compatible with 0.10.30+ and 1.0+)
+import mediapipe as mp
 
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
+# dotenv for reading hidden .env files
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
+# Google GenAI import (Compatibility Layer)
 GEMINI_INSTALLED = False
 try:
     import google.generativeai as genai
@@ -50,6 +39,7 @@ except ImportError:
     except ImportError:
         GEMINI_INSTALLED = False
 
+# SECURE API KEY INITIALIZATION
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 if not gemini_api_key:
     try:
@@ -58,7 +48,7 @@ if not gemini_api_key:
         gemini_api_key = None
 
 # ==============================================================================
-# 1. PAGE & ENGINE CONFIGURATION
+# 1. PAGE & ENGINE CONFIGURATION (EXACT ORIGINAL GLASSMORPHISM UI)
 # ==============================================================================
 st.set_page_config(
     page_title="AURA AI | Clinical Biomechanics & Dual AI Engine",
@@ -163,6 +153,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Voice Guidance JS Integration
 def play_voice_guidance(text_prompt, enable_voice=True):
     if enable_voice and text_prompt:
         clean_text = text_prompt.replace("'", "").replace('"', '')
@@ -183,7 +174,7 @@ def play_voice_guidance(text_prompt, enable_voice=True):
         components.html(js_code, height=0, width=0)
 
 # ==============================================================================
-# 2. LIGHTWEIGHT POSE ENGINE
+# 2. LIGHTWEIGHT FAST MEDIAPIPE POSE ENGINE (PERMISSION-SAFE & NO FREEZE)
 # ==============================================================================
 def calculate_angle(a, b, c):
     a, b, c = np.array(a), np.array(b), np.array(c)
@@ -196,7 +187,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
         try:
             self.pose = mp_pose.Pose(
                 static_image_mode=False,
-                model_complexity=0,
+                model_complexity=0,  # Fast processing to prevent camera freezing
                 smooth_landmarks=True,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5
@@ -264,6 +255,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
 
             asym_delta = abs(l_knee_angle - r_knee_angle)
 
+            # Velocity & Power Calculation
             curr_time = time.time()
             dt = curr_time - self.prev_time
             if self.prev_hip and dt > 0:
@@ -273,6 +265,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
             self.prev_hip = l_hip
             self.prev_time = curr_time
 
+            # Exercise Logic
             if self.exercise == "Squats":
                 self.last_acc = max(30, 100 - int(asym_delta * 1.5))
                 if l_knee[0] > l_ankle[0] + 25:
@@ -346,6 +339,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
         else:
             self.last_feedback = "No person detected in frame"
 
+        # Direct HUD Text on Frame
         cv2.putText(img, f"REPS: {self.counter}", (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         cv2.putText(img, f"FORM: {self.last_acc}%", (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
@@ -367,6 +361,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
+# SIDEBAR CONFIGURATION
 st.sidebar.markdown("## 🎛 Control Hub")
 
 selected_exercise = st.sidebar.selectbox(
@@ -385,6 +380,7 @@ else:
 st.sidebar.markdown("---")
 enable_voice_coach = st.sidebar.toggle("Enable Voice Guidance", value=True)
 
+# TAB STRUCTURE
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎥 Live Biomechanics HUD", 
     "📊 Kinematics & Power", 
@@ -408,9 +404,6 @@ with tab1:
             rtc_configuration=RTC_CONFIGURATION,
             video_processor_factory=UltraFastPoseProcessor,
             media_stream_constraints={"video": True, "audio": False},
-            video_html_attributes=VideoHTMLAttributes(
-                autoPlay=True, controls=False, style={"width": "100%"}, muted=True
-            ),
             async_transform=True,
         )
         
@@ -420,11 +413,6 @@ with tab1:
 
     with col_hud:
         st.markdown("### 📈 Live Telemetry")
-        
-        # Smooth Auto Refresh every 500ms when video is actively streaming
-        if ctx.state.playing and HAS_AUTOREFRESH:
-            st_autorefresh(interval=500, key="hud_sync_refresh")
-
         if ctx.video_processor:
             proc = ctx.video_processor
             is_hold = selected_exercise in ["Plank", "Tree Pose (Yoga)", "Warrior II (Yoga)"]
