@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration, VideoHTMLAttributes
 
-# Real-time sidebar UI sync refresh component
+# Real-time UI sync refresh component
 try:
     from streamlit_autorefresh import st_autorefresh
     HAS_AUTOREFRESH = True
@@ -23,18 +23,16 @@ os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
 import mediapipe as mp
 
-# Modern & Linter-Safe MediaPipe Import
-try:
-    if hasattr(mp, "solutions") and hasattr(mp.solutions, "pose"):
-        mp_pose = mp.solutions.pose
-        mp_drawing = mp.solutions.drawing_utils
-    else:
-        # '# type: ignore' editor warnings ko suppress karta hai
-        from mediapipe.python.solutions import pose as mp_pose  # type: ignore
-        from mediapipe.python.solutions import drawing_utils as mp_drawing  # type: ignore
-except Exception:
-    import mediapipe.python.solutions.pose as mp_pose  # type: ignore
-    import mediapipe.python.solutions.drawing_utils as mp_drawing  # type: ignore
+# Safe Dynamic MediaPipe Loader
+mp_solutions = getattr(mp, "solutions", None)
+
+if mp_solutions is not None:
+    mp_pose = mp_solutions.pose
+    mp_drawing = mp_solutions.drawing_utils
+else:
+    import mediapipe.solutions.pose as mp_pose  # type: ignore
+    import mediapipe.solutions.drawing_utils as mp_drawing  # type: ignore
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -185,7 +183,7 @@ def play_voice_guidance(text_prompt, enable_voice=True):
         components.html(js_code, height=0, width=0)
 
 # ==============================================================================
-# 2. LIGHTWEIGHT POSE ENGINE
+# 2. LIGHTWEIGHT BIOMECHANICS POSE ENGINE
 # ==============================================================================
 def calculate_angle(a, b, c):
     a, b, c = np.array(a), np.array(b), np.array(c)
