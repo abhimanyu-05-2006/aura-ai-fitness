@@ -23,17 +23,18 @@ os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
 import mediapipe as mp
 
+# Modern & Linter-Safe MediaPipe Import
 try:
     if hasattr(mp, "solutions") and hasattr(mp.solutions, "pose"):
         mp_pose = mp.solutions.pose
         mp_drawing = mp.solutions.drawing_utils
     else:
-        import mediapipe.python.solutions.pose as mp_pose
-        import mediapipe.python.solutions.drawing_utils as mp_drawing
+        # '# type: ignore' editor warnings ko suppress karta hai
+        from mediapipe.python.solutions import pose as mp_pose  # type: ignore
+        from mediapipe.python.solutions import drawing_utils as mp_drawing  # type: ignore
 except Exception:
-    import mediapipe.python.solutions.pose as mp_pose
-    import mediapipe.python.solutions.drawing_utils as mp_drawing
-
+    import mediapipe.python.solutions.pose as mp_pose  # type: ignore
+    import mediapipe.python.solutions.drawing_utils as mp_drawing  # type: ignore
 try:
     from dotenv import load_dotenv
     load_dotenv()
