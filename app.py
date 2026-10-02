@@ -7,7 +7,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration, VideoHTMLAttributes
+
+# Real-time sidebar UI sync refresh component
+try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except ImportError:
+    HAS_AUTOREFRESH = False
 
 # ------------------------------------------------------------------------------
 # STREAMLIT CLOUD PERMISSION & MODEL CACHE FIX
@@ -345,7 +352,7 @@ class UltraFastPoseProcessor(VideoProcessorBase):
         return frame.from_ndarray(img, format="bgr24")
 
 # ==============================================================================
-# 3. FRONTEND UI & REAL-TIME SIDEBAR TELEMETRY SYNC
+# 3. FRONTEND UI & DASHBOARD
 # ==============================================================================
 st.markdown("""
     <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0 20px 0;">
@@ -401,6 +408,9 @@ with tab1:
             rtc_configuration=RTC_CONFIGURATION,
             video_processor_factory=UltraFastPoseProcessor,
             media_stream_constraints={"video": True, "audio": False},
+            video_html_attributes=VideoHTMLAttributes(
+                autoPlay=True, controls=False, style={"width": "100%"}, muted=True
+            ),
             async_transform=True,
         )
         
@@ -411,44 +421,34 @@ with tab1:
     with col_hud:
         st.markdown("### 📈 Live Telemetry")
         
-        # Placeholders to enable dynamic UI updates without page flicker
-        rep_holder = st.empty()
-        form_holder = st.empty()
-        boss_holder = st.empty()
-        badge_holder = st.empty()
-        guidance_holder = st.empty()
-        warning_holder = st.empty()
+        # Smooth Auto Refresh every 500ms when video is actively streaming
+        if ctx.state.playing and HAS_AUTOREFRESH:
+            st_autorefresh(interval=500, key="hud_sync_refresh")
 
         if ctx.video_processor:
             proc = ctx.video_processor
             is_hold = selected_exercise in ["Plank", "Tree Pose (Yoga)", "Warrior II (Yoga)"]
             
-            rep_holder.metric("Completed Reps / Hold Time", f"{proc.hold_duration}s" if is_hold else proc.counter)
+            st.metric("Completed Reps / Hold Time", f"{proc.hold_duration}s" if is_hold else proc.counter)
             
             avg_acc = int(np.mean(proc.accuracy_scores)) if proc.accuracy_scores else proc.last_acc
-            form_holder.metric("Instant Form Accuracy", f"{proc.last_acc}%", delta=f"Avg: {avg_acc}%")
+            st.metric("Instant Form Accuracy", f"{proc.last_acc}%", delta=f"Avg: {avg_acc}%")
             
-            with boss_holder.container():
-                st.markdown("##### 👾 AI Boss Health")
-                st.progress(proc.boss_hp / 100)
+            st.markdown("##### 👾 AI Boss Health")
+            st.progress(proc.boss_hp / 100)
             
             if proc.last_acc >= 85:
-                badge_holder.markdown('<div class="status-badge badge-perfect">🟢 PERFECT BIOMECHANICAL FORM</div>', unsafe_allow_html=True)
+                st.markdown('<div class="status-badge badge-perfect">🟢 PERFECT BIOMECHANICAL FORM</div>', unsafe_allow_html=True)
             elif proc.last_acc >= 60:
-                badge_holder.markdown('<div class="status-badge badge-warn">🟡 MINOR POSTURE DEVIATION</div>', unsafe_allow_html=True)
+                st.markdown('<div class="status-badge badge-warn">🟡 MINOR POSTURE DEVIATION</div>', unsafe_allow_html=True)
             else:
-                badge_holder.markdown('<div class="status-badge badge-danger">🔴 HIGH RISK INJURY CORRECTION</div>', unsafe_allow_html=True)
+                st.markdown('<div class="status-badge badge-danger">🔴 HIGH RISK INJURY CORRECTION</div>', unsafe_allow_html=True)
 
-            guidance_holder.info(f"💡 **AI Guidance**: {proc.last_feedback}")
+            st.info(f"💡 **AI Guidance**: {proc.last_feedback}")
             if proc.last_warning:
-                warning_holder.error(f"⚠️ **Hazard Alert**: {proc.last_warning}")
+                st.error(f"⚠️ **Hazard Alert**: {proc.last_warning}")
                 
             play_voice_guidance(proc.last_feedback, enable_voice=enable_voice_coach)
-            
-            # Auto-Rerun loop while camera is streaming to keep side panel real-time
-            if ctx.state.playing:
-                time.sleep(0.1)
-                st.rerun()
         else:
             st.warning("⚠️ Press **START** button on camera player to activate webcam stream.")
 

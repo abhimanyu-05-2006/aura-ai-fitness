@@ -1,8 +1,9 @@
 streamlit
 streamlit-webrtc
 opencv-python-headless
-mediapipe==0.10.14
+mediapipe
 numpy
 reportlab
 google-generativeai
 python-dotenv
+streamlit-autorefresh
