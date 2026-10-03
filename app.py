@@ -498,7 +498,7 @@ with tab3:
                 genai.configure(api_key=gemini_api_key)
                 
                 # Gemini 1.5 Flash Model Call
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 system_prompt = f"""
                 You are AURA AI, an expert biomechanics and fitness coach.
