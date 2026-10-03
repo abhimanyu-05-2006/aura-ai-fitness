@@ -477,34 +477,44 @@ with tab3:
     st.markdown("---")
     st.info(f"**BMI:** {bmi} | **Target Goal:** {fitness_goal} | **Level:** {activity_level}")
 
+    # Debug Indicator for API Key
+    if gemini_api_key:
+        st.caption("✅ API Key Detected: Connecting to Gemini...")
+    else:
+        st.error("⚠️ API Key not detected! Add GEMINI_API_KEY in .env or Streamlit Secrets.")
+
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    user_query = st.text_input("Ask any question about exercise form, diet, or workout plans:", placeholder="E.g., Squats karte waqt knee pain se kaise bache?")
+    user_query = st.text_input("Ask any question about exercise form, diet, or workout plans:", placeholder="E.g., best push up form?")
     
     if st.button("Send Question") and user_query:
         response = ""
-        if gemini_api_key and GEMINI_INSTALLED:
+        
+        if gemini_api_key:
             try:
+                # Modern / Standard Gemini Client Config
+                import google.generativeai as genai
                 genai.configure(api_key=gemini_api_key)
+                
+                # Gemini 1.5 Flash Model Call
                 model = genai.GenerativeModel('gemini-1.5-flash')
-                context_prompt = f"""
-                You are AURA AI, an elite fitness & biomechanics coach.
-                User Context: Age {age}, Weight {user_weight_kg}kg, Height {height_cm}cm (BMI: {bmi}), Goal: {fitness_goal}, Exercise: {selected_exercise}.
+                
+                system_prompt = f"""
+                You are AURA AI, an expert biomechanics and fitness coach.
+                User Context: Age {age}, Weight {user_weight_kg}kg, Height {height_cm}cm (BMI: {bmi}), Goal: {fitness_goal}, Current Exercise: {selected_exercise}.
                 Question: {user_query}
-                Provide a clear, helpful response in Hinglish or English.
+                
+                Provide a short, direct, and actionable answer in natural Hinglish or English.
                 """
-                response_obj = model.generate_content(context_prompt)
-                response = response_obj.text
-            except Exception:
-                response = "Knee pain avoid karne ke liye: 1) Knees ko toes ke aage mat jaane do. 2) Heels ground par fix rakho. 3) Warm-up zaroor karein."
+                
+                res = model.generate_content(system_prompt)
+                response = res.text
+            except Exception as err:
+                response = f"⚠️ Gemini Connection Error: {str(err)}"
         else:
-            query_l = user_query.lower()
-            if "knee" in query_l or "pain" in query_l:
-                response = "Knee pain avoid karne ke liye: 1) Knees ko toes ke aage zyadatar mat jaane do. 2) Squat karte waqt heels ground par rakho. 3) Proper warm up karo."
-            else:
-                response = "Optimum results ke liye regular form precision aur controlled reps ke sath workout karein."
-            
+            response = "API Key setup missing. Please verify your GEMINI_API_KEY setting."
+
         st.session_state.chat_history.append(("user", user_query))
         st.session_state.chat_history.append(("ai", response))
 
