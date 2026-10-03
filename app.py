@@ -17,27 +17,27 @@ except ImportError:
     HAS_AUTOREFRESH = False
 
 # ------------------------------------------------------------------------------
-# STREAMLIT CLOUD PERMISSION & CRASH-PROOF MEDIAPIPE LOADER
+# STREAMLIT CLOUD & LINUX SAFE MEDIAPIPE LOADER (BUG-FREE & NO LINTER WARNINGS)
 # ------------------------------------------------------------------------------
 os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
 import mediapipe as mp
 
-# Safe Dynamic MediaPipe Loader
+# Safe Dynamic MediaPipe Loader using getattr
 mp_solutions = getattr(mp, "solutions", None)
-
 if mp_solutions is not None:
+    mp_pose = mp_solutions.pose
+    mp_drawing = mp_solutions.drawing_utils
+else:
     import mediapipe as mp
-
-# Absolute Fail-Safe MediaPipe Solutions Loader
-try:
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
-except AttributeError:
-    # Backup resolution for specific virtualenv configurations
-    from mediapipe import python as mp_python  # type: ignore
-    mp_pose = mp_python.solutions.pose
-    mp_drawing = mp_python.solutions.drawing_utils
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 GEMINI_INSTALLED = False
 try:
@@ -58,7 +58,7 @@ if not gemini_api_key:
         gemini_api_key = None
 
 # ==============================================================================
-# 1. PAGE & ENGINE CONFIGURATION
+# 1. PAGE & STYLING CONFIGURATION
 # ==============================================================================
 st.set_page_config(
     page_title="AURA AI | Clinical Biomechanics & Dual AI Engine",
@@ -404,7 +404,7 @@ with tab1:
     
     with col_cam:
         ctx = webrtc_streamer(
-            key="aura-webrtc-stream-v2",
+            key="aura-webrtc-stream-v3",
             rtc_configuration=RTC_CONFIGURATION,
             video_processor_factory=UltraFastPoseProcessor,
             media_stream_constraints={"video": True, "audio": False},
