@@ -7,7 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration, VideoHTMLAttributes
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration, WebRtcMode
 
 # Real-time UI sync refresh component
 try:
@@ -17,21 +17,24 @@ except ImportError:
     HAS_AUTOREFRESH = False
 
 # ------------------------------------------------------------------------------
-# STREAMLIT CLOUD & LINUX SAFE MEDIAPIPE LOADER (BUG-FREE & NO LINTER WARNINGS)
+# STREAMLIT CLOUD & LINUX SAFE MEDIAPIPE LOADER (CRASH-FREE FOR ALL VERSIONS)
 # ------------------------------------------------------------------------------
 os.environ["MEDIAPIPE_CACHE_DIR"] = tempfile.gettempdir()
 
 import mediapipe as mp
 
-# Safe Dynamic MediaPipe Loader using getattr
-mp_solutions = getattr(mp, "solutions", None)
-if mp_solutions is not None:
-    mp_pose = mp_solutions.pose
-    mp_drawing = mp_solutions.drawing_utils
-else:
-    import mediapipe as mp
+# Safe Compatibility Loader for Modern & Legacy MediaPipe
+try:
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
+except AttributeError:
+    try:
+        import mediapipe.python.solutions.pose as mp_pose
+        import mediapipe.python.solutions.drawing_utils as mp_drawing
+    except ImportError:
+        from mediapipe.tasks import python as mp_tasks
+        mp_pose = mp.solutions.pose
+        mp_drawing = mp.solutions.drawing_utils
 
 try:
     from dotenv import load_dotenv
@@ -404,14 +407,11 @@ with tab1:
     
     with col_cam:
         ctx = webrtc_streamer(
-            key="aura-webrtc-stream-v3",
+            key="aura-webrtc-stream-v6",
+            mode=WebRtcMode.SENDRECV,
             rtc_configuration=RTC_CONFIGURATION,
             video_processor_factory=UltraFastPoseProcessor,
             media_stream_constraints={"video": True, "audio": False},
-            video_html_attributes=VideoHTMLAttributes(
-                autoPlay=True, controls=False, style={"width": "100%"}, muted=True
-            ),
-            async_transform=True,
         )
         
         if ctx.video_processor:
@@ -496,7 +496,7 @@ with tab3:
                 """
                 response_obj = model.generate_content(context_prompt)
                 response = response_obj.text
-            except Exception as e:
+            except Exception:
                 response = "Knee pain avoid karne ke liye: 1) Knees ko toes ke aage mat jaane do. 2) Heels ground par fix rakho. 3) Warm-up zaroor karein."
         else:
             query_l = user_query.lower()
